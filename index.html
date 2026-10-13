@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Clinic Queue</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      color: #183238;
+      background: #f3f7f6;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    header { padding: 28px max(24px, calc((100% - 1080px) / 2)); color: #fff; background: #176b67; }
+    header h1 { margin: 0; font-size: 1.65rem; letter-spacing: -0.03em; }
+    header p { margin: 6px 0 0; color: #d1eeea; }
+    main { width: min(1080px, calc(100% - 40px)); margin: 32px auto; }
+    .layout { display: grid; grid-template-columns: minmax(240px, 0.8fr) minmax(0, 1.5fr); gap: 22px; align-items: start; }
+    .panel { padding: 24px; border: 1px solid #e0eae8; border-radius: 14px; background: #fff; box-shadow: 0 8px 28px #173c3510; }
+    h2 { margin: 0 0 18px; font-size: 1.1rem; }
+    form label { display: block; margin: 14px 0 6px; color: #52696b; font-size: 0.88rem; font-weight: 600; }
+    input, select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #cfddda; border-radius: 7px; background: #fff; color: inherit; font: inherit; }
+    input:focus, select:focus { outline: 3px solid #b8e2dc; border-color: #388f87; }
+    button { min-height: 40px; padding: 9px 14px; border: 0; border-radius: 7px; color: #fff; background: #176b67; font: inherit; font-weight: 650; cursor: pointer; }
+    button:hover { background: #105752; }
+    button:focus-visible { outline: 3px solid #88cfc5; outline-offset: 2px; }
+    .full { width: 100%; margin-top: 18px; }
+    .search-row { display: flex; gap: 8px; }
+    .search-row input { min-width: 0; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+    .toolbar h2 { margin-bottom: 0; }
+    #count { color: #657a7b; font-size: 0.9rem; }
+    #notice { min-height: 22px; margin: 14px 0 8px; color: #176b67; font-size: 0.92rem; }
+    #notice.error { color: #b42318; }
+    .patient-list { display: grid; gap: 10px; }
+    .patient { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 14px; border: 1px solid #e4ecea; border-radius: 10px; }
+    .queue { color: #176b67; font-size: 1.2rem; font-weight: 750; text-align: center; }
+    .patient h3 { margin: 0; font-size: 1rem; }
+    .details { margin: 5px 0 0; color: #657a7b; font-size: 0.86rem; }
+    .priority { color: #38595a; font-weight: 650; }
+    .delete { min-height: 34px; padding: 6px 10px; color: #a4322a; background: #fff1ef; font-size: 0.85rem; }
+    .delete:hover { background: #ffe2de; }
+    .empty { margin: 10px 0 0; color: #657a7b; }
+    @media (max-width: 700px) {
+      header { padding: 24px 20px; }
+      main { width: min(100% - 28px, 520px); margin: 18px auto; }
+      .layout { grid-template-columns: 1fr; gap: 14px; }
+      .panel { padding: 19px; }
+    }
+    @media (max-width: 420px) {
+      .patient { grid-template-columns: 44px minmax(0, 1fr) auto; gap: 9px; padding: 11px; }
+      .delete { padding: 6px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Clinic Queue</h1>
+    <p>Patient registration and queue</p>
+  </header>
+
+  <main>
+    <div class="layout">
+      <section class="panel" aria-labelledby="add-heading">
+        <h2 id="add-heading">Add patient</h2>
+        <form id="patient-form">
+          <label for="patient-name">Patient name</label>
+          <input id="patient-name" name="patient_name" required maxlength="100">
+
+          <label for="service">Service</label>
+          <input id="service" name="service" required maxlength="100"
+                 placeholder="e.g. Consultation">
+
+          <label for="priority">Priority</label>
+          <select id="priority" name="priority" required>
+            <option value="Normal">Normal</option>
+            <option value="High">High</option>
+            <option value="Urgent">Urgent</option>
+          </select>
+
+          <button class="full" type="submit">Add to queue</button>
+        </form>
+
+        <h2 style="margin-top: 30px">Find by ID</h2>
+        <form id="search-form" class="search-row">
+          <input id="search-id" type="number" min="1" step="1"
+                 aria-label="Patient ID" placeholder="Patient ID" required>
+          <button type="submit">Search</button>
+        </form>
+        <button id="show-all" class="full" type="button">Show all patients</button>
+      </section>
+
+      <section class="panel" aria-labelledby="patients-heading">
+        <div class="toolbar">
+          <h2 id="patients-heading">Patients</h2>
+          <span id="count"></span>
+        </div>
+        <p id="notice" role="status" aria-live="polite"></p>
+        <div id="patient-list" class="patient-list"></div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const list = document.querySelector("#patient-list");
+    const count = document.querySelector("#count");
+    const notice = document.querySelector("#notice");
+
+    function showNotice(message, isError = false) {
+      notice.textContent = message;
+      notice.classList.toggle("error", isError);
+    }
+
+    async function request(url, options) {
+      const response = await fetch(url, options);
+      const data = response.status === 204 ? null : await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || "The request could not be completed.");
+      }
+      return data;
+    }
+
+    function renderPatients(patients) {
+      list.replaceChildren();
+      count.textContent = `${patients.length} ${patients.length === 1 ? "patient" : "patients"}`;
+
+      if (patients.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "No patients found.";
+        list.append(empty);
+        return;
+      }
+
+      for (const patient of patients) {
+        const row = document.createElement("article");
+        row.className = "patient";
+
+        const queue = document.createElement("div");
+        queue.className = "queue";
+        queue.textContent = `#${patient.queue_number}`;
+
+        const info = document.createElement("div");
+        const name = document.createElement("h3");
+        name.textContent = patient.patient_name;
+        const details = document.createElement("p");
+        details.className = "details";
+        details.textContent = `ID ${patient.id} · ${patient.service} · `;
+        const priority = document.createElement("span");
+        priority.className = "priority";
+        priority.textContent = patient.priority;
+        details.append(priority);
+        info.append(name, details);
+
+        const deleteButton = document.createElement("button");
+        deleteButton.className = "delete";
+        deleteButton.type = "button";
+        deleteButton.textContent = "Delete";
+        deleteButton.setAttribute("aria-label", `Delete ${patient.patient_name}`);
+        deleteButton.addEventListener("click", () => deletePatient(patient.id));
+
+        row.append(queue, info, deleteButton);
+        list.append(row);
+      }
+    }
+
+    async function loadPatients() {
+      try {
+        renderPatients(await request("/api/patients"));
+        showNotice("");
+      } catch (error) {
+        showNotice(error.message, true);
+      }
+    }
+
+    async function deletePatient(id) {
+      try {
+        await request(`/api/patients/${id}`, { method: "DELETE" });
+        showNotice("Patient deleted.");
+        await loadPatients();
+      } catch (error) {
+        showNotice(error.message, true);
+      }
+    }
+
+    document.querySelector("#patient-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const fields = new FormData(form);
+
+      try {
+        const patient = await request("/api/patients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            patient_name: fields.get("patient_name"),
+            service: fields.get("service"),
+            priority: fields.get("priority")
+          })
+        });
+
+        form.reset();
+        showNotice(`Added ${patient.patient_name} as queue #${patient.queue_number}.`);
+        await loadPatients();
+      } catch (error) {
+        showNotice(error.message, true);
+      }
+    });
+
+    document.querySelector("#search-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const id = document.querySelector("#search-id").value;
+
+      try {
+        renderPatients([await request(`/api/patients/${id}`)]);
+        showNotice("");
+      } catch (error) {
+        renderPatients([]);
+        showNotice(error.message, true);
+      }
+    });
+
+    document.querySelector("#show-all").addEventListener("click", loadPatients);
+    loadPatients();
+  </script>
+</html>
+</body>
